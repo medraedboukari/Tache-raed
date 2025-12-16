@@ -2077,7 +2077,7 @@ void on_refresh_clicked(GtkButton *button, gpointer data)
 // =========================================================
 // COURSE TREEVIEW ROW ACTIVATED (7 COLONNES SANS CHECKBOX ET SANS ÉDITION)
 // =========================================================
-void on_treeview13_row_activated(GtkTreeView *treeview,
+void on_treeview_2_row_activated(GtkTreeView *treeview,
                                  GtkTreePath *path,
                                  GtkTreeViewColumn *column,
                                  gpointer user_data)
@@ -2108,42 +2108,42 @@ void on_treeview13_row_activated(GtkTreeView *treeview,
 }
 
 // =========================================================
-// BUTTON 40 CLICKED (Load Courses) - AVEC POP-UP
+// refresh_2 CLICKED (Load Courses) - AVEC POP-UP
 // =========================================================
-void on_button40_clicked(GtkButton *button, gpointer user_data)
+void on_refresh_2_clicked(GtkButton *button, gpointer user_data)
 {
-    printf("\n=== DEBUG on_button40_clicked START ===\n");
+    printf("\n=== DEBUG on_refresh_2_clicked START ===\n");
     
     GtkWidget *win = gtk_widget_get_toplevel(GTK_WIDGET(button));
     
-    GtkWidget *treeview13 = lookup_widget(win, "treeview13");
-    if (!treeview13)
+    GtkWidget *treeview_2 = lookup_widget(win, "treeview_2");
+    if (!treeview_2)
     {
-        printf("Error: treeview13 not found!\n");
+        printf("Error: treeview_2 not found!\n");
         show_popup_message(win, "Error", "Treeview widget not found!", GTK_MESSAGE_ERROR);
         return;
     }
     
-    loadCourses(GTK_TREE_VIEW(treeview13), "courses.txt");
+    loadCourses(GTK_TREE_VIEW(treeview_2), "courses.txt");
     
     show_popup_message(win, "Success", "Courses loaded successfully!", GTK_MESSAGE_INFO);
     
-    printf("=== DEBUG on_button40_clicked END ===\n");
+    printf("=== DEBUG on_refresh_2_clicked END ===\n");
 }
 
 // =========================================================
-// BUTTON 39 CLICKED (Choose/Assign Coach to Course) - VERSION SIMPLIFIÉE
+// btchoose CLICKED (Choose/Assign Coach to Course) - VERSION SIMPLIFIÉE
 // =========================================================
-void on_button39_clicked(GtkButton *button, gpointer user_data)
+void on_btchoose_clicked(GtkButton *button, gpointer user_data)
 {
-    printf("\n=== DEBUG on_button39_clicked START ===\n");
+    printf("\n=== DEBUG on_btchoose_clicked START ===\n");
     
     GtkWidget *win = gtk_widget_get_toplevel(GTK_WIDGET(button));
     GtkWidget *entryid = lookup_widget(win, "entryid");
-    GtkWidget *treeview13 = lookup_widget(win, "treeview13");
+    GtkWidget *treeview_2 = lookup_widget(win, "treeview_2");
     GtkWidget *label201 = lookup_widget(win, "label201");
 
-    if (!entryid || !treeview13 || !label201)
+    if (!entryid || !treeview_2 || !label201)
     {
         printf("Error: Some widgets not found!\n");
         show_popup_message(win, "Error", "Some widgets are missing!", GTK_MESSAGE_ERROR);
@@ -2204,7 +2204,7 @@ void on_button39_clicked(GtkButton *button, gpointer user_data)
     }
     
     // Vérifier si un cours est sélectionné
-    GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(treeview13));
+    GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(treeview_2));
     GtkTreeModel *model;
     GtkTreeIter iter;
 
@@ -2423,7 +2423,7 @@ void on_button39_clicked(GtkButton *button, gpointer user_data)
     
     if (update_result) {
         // Recharger les TreeViews
-        refresh_course_tree(treeview13);
+        refresh_course_tree(treeview_2);
         
         GtkWidget *treeview_coach = lookup_widget(win, "treeviewmanage");
         if (treeview_coach)
@@ -2504,7 +2504,7 @@ void on_button39_clicked(GtkButton *button, gpointer user_data)
     g_free(clean_course_time);
     
     printf("DEBUG: Assignment complete for coach %d to course %s\n", coach_id, clean_course_id);
-    printf("=== DEBUG on_button39_clicked END ===\n\n");
+    printf("=== DEBUG on_btchoose_clicked END ===\n\n");
 }
 
 // =========================================================

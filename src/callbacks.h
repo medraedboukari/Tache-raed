@@ -54,3 +54,17 @@ on_checkbutton_center_toggled          (GtkToggleButton *togglebutton,
 void
 on_checkbutton_name_toggled            (GtkToggleButton *togglebutton,
                                         gpointer         user_data);
+
+void
+on_treeview_2_row_activated            (GtkTreeView     *treeview,
+                                        GtkTreePath     *path,
+                                        GtkTreeViewColumn *column,
+                                        gpointer         user_data);
+
+void
+on_refresh_2_clicked                   (GtkButton       *button,
+                                        gpointer         user_data);
+
+void
+on_btchoose_clicked                    (GtkButton       *button,
+                                        gpointer         user_data);
