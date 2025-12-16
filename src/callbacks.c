@@ -29,78 +29,118 @@ static size_t read_callback(void *ptr, size_t size, size_t nmemb, void *userp) {
 }
 
 // =========================================================
-// FONCTIONS POUR CHECKBOX DANS TREEVIEW (COACH SEULEMENT)
+// VARIABLES GLOBALES
+// =========================================================
+int gender = 1; // 1 = Male, 2 = Female
+
+// =========================================================
+// DÉCLARATIONS DES FONCTIONS (PROTOTYPES)
 // =========================================================
 
-// Fonction appelée quand on clique sur une checkbox
-void on_cell_toggled_coach(GtkCellRendererToggle *cell, gchar *path_str, gpointer data) {
-    GtkWidget *treeview = GTK_WIDGET(data);
-    GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(treeview));
-    GtkTreePath *path = gtk_tree_path_new_from_string(path_str);
-    GtkTreeIter iter;
-    gboolean active;
+// Fonctions utilitaires (déclarées en premier)
+void show_popup_message(GtkWidget *parent, const char *title, const char *message, GtkMessageType type);
+gboolean show_confirmation_dialog(GtkWidget *parent, const char *title, const char *message);
+int is_number(const char *str);
+int is_valid_id(const char *str);
+int is_valid_phone(const char *str);
+int is_letters(const char *str);
+void update_coach_in_file(int coach_id, int column_index, const char *new_value);
+int send_email_to_admin(const char *subject, const char *body, const char *action_type);
+int send_email_to_coach(const char *coach_email, const char *subject, const char *body);
+
+// Fonctions pour TreeView
+void on_cell_toggled_coach(GtkCellRendererToggle *cell, gchar *path_str, gpointer data);
+void on_cell_edited_coach(GtkCellRendererText *cell, gchar *path_str, gchar *new_text, gpointer data);
+void create_columns_with_checkbox_coach(GtkTreeView *treeview, const char **titles, int num_columns);
+GList* get_selected_coach_ids(GtkWidget *treeview);
+void loadCoaches(GtkTreeView *treeview, const char *filename);
+void loadCourses(GtkTreeView *treeview, const char *filename);
+
+// =========================================================
+// FONCTIONS UTILITAIRES (DÉFINIES EN PREMIER)
+// =========================================================
+
+// =========================================================
+// AFFICHER UN MESSAGE DANS UNE POP-UP
+// =========================================================
+void show_popup_message(GtkWidget *parent, const char *title, const char *message, GtkMessageType type) {
+    GtkWidget *dialog = gtk_message_dialog_new(
+        parent ? GTK_WINDOW(parent) : NULL,
+        GTK_DIALOG_MODAL,
+        type,
+        GTK_BUTTONS_OK,
+        "%s", message);
     
-    if (gtk_tree_model_get_iter(model, &iter, path)) {
-        gtk_tree_model_get(model, &iter, 0, &active, -1);
-        active = !active;
-        gtk_list_store_set(GTK_LIST_STORE(model), &iter, 0, active, -1);
+    if (title) {
+        gtk_window_set_title(GTK_WINDOW(dialog), title);
     }
     
-    gtk_tree_path_free(path);
+    gtk_dialog_run(GTK_DIALOG(dialog));
+    gtk_widget_destroy(dialog);
 }
 
-// Fonction pour initialiser les colonnes avec checkbox (pour coach seulement)
-void create_columns_with_checkbox_coach(GtkTreeView *treeview, const char **titles, int num_columns) {
-    // Supprimer les colonnes existantes
-    GList *columns = gtk_tree_view_get_columns(treeview);
-    while (columns) {
-        GtkTreeViewColumn *col = columns->data;
-        gtk_tree_view_remove_column(treeview, col);
-        columns = columns->next;
+// =========================================================
+// AFFICHER UNE POP-UP DE CONFIRMATION (YES/NO)
+// =========================================================
+gboolean show_confirmation_dialog(GtkWidget *parent, const char *title, const char *message) {
+    GtkWidget *dialog = gtk_message_dialog_new(
+        parent ? GTK_WINDOW(parent) : NULL,
+        GTK_DIALOG_MODAL,
+        GTK_MESSAGE_QUESTION,
+        GTK_BUTTONS_YES_NO,
+        "%s", message);
+    
+    if (title) {
+        gtk_window_set_title(GTK_WINDOW(dialog), title);
     }
     
-    // Ajouter la colonne checkbox
-    GtkCellRenderer *check_renderer = gtk_cell_renderer_toggle_new();
-    GtkTreeViewColumn *check_column = gtk_tree_view_column_new_with_attributes(
-        "Select", check_renderer, "active", 0, NULL);
-    gtk_tree_view_append_column(treeview, check_column);
-    g_signal_connect(check_renderer, "toggled", G_CALLBACK(on_cell_toggled_coach), treeview);
+    gint response = gtk_dialog_run(GTK_DIALOG(dialog));
+    gtk_widget_destroy(dialog);
     
-    // Ajouter les autres colonnes
-    for (int i = 1; i < num_columns; i++) {
-        GtkCellRenderer *renderer = gtk_cell_renderer_text_new();
-        GtkTreeViewColumn *column = gtk_tree_view_column_new_with_attributes(
-            titles[i], renderer, "text", i, NULL);
-        gtk_tree_view_column_set_resizable(column, TRUE);
-        gtk_tree_view_append_column(treeview, column);
-    }
+    return (response == GTK_RESPONSE_YES);
 }
 
-// Obtenir les IDs sélectionnés via les checkbox (coach seulement)
-GList* get_selected_coach_ids(GtkWidget *treeview) {
-    GList *selected_ids = NULL;
-    GtkTreeModel *model;
-    GtkTreeIter iter;
-    gboolean valid;
-    
-    model = gtk_tree_view_get_model(GTK_TREE_VIEW(treeview));
-    if (!model) return NULL;
-    
-    valid = gtk_tree_model_get_iter_first(model, &iter);
-    while (valid) {
-        gboolean selected;
-        int id;
-        
-        gtk_tree_model_get(model, &iter, 0, &selected, 1, &id, -1);
-        
-        if (selected && id > 0) {
-            selected_ids = g_list_append(selected_ids, GINT_TO_POINTER(id));
-        }
-        
-        valid = gtk_tree_model_iter_next(model, &iter);
-    }
-    
-    return selected_ids;
+// ===========================================
+// VALIDATION INPUT - AVEC CONTRÔLE MAX 8 CHIFFRES
+// ===========================================
+int is_number(const char *str)
+{
+    if (str == NULL || str[0] == '\0') return 0;
+    for (int i = 0; str[i] != '\0'; i++)
+        if (!isdigit(str[i])) return 0;
+    return 1;
+}
+
+int is_valid_id(const char *str)
+{
+    if (!is_number(str)) return 0;
+    if (strlen(str) > 8) return 0;  // Maximum 8 chiffres
+    if (strlen(str) == 0) return 0; // Ne peut pas être vide
+    return 1;
+}
+
+int is_valid_phone(const char *str)
+{
+    if (!is_number(str)) return 0;
+    if (strlen(str) != 8) return 0;  // Doit être exactement 8 chiffres (format Tunisien)
+    return 1;
+}
+
+int is_letters(const char *str)
+{
+    if (str == NULL || str[0] == '\0') return 0;
+    for (int i = 0; str[i] != '\0'; i++)
+        if (!isalpha(str[i]) && str[i] != ' ') return 0;
+    return 1;
+}
+
+// ===========================================
+// CLEAR LABEL
+// ===========================================
+gboolean clear_label(gpointer data)
+{
+    gtk_label_set_text(GTK_LABEL(data), "");
+    return FALSE;
 }
 
 // =========================================================
@@ -368,96 +408,339 @@ int send_email(const char *subject, const char *body) {
     return send_email_to_admin(subject, body, "add");
 }
 
-int gender = 1; // 1 = Male, 2 = Female
-
 // =========================================================
-// AFFICHER UN MESSAGE DANS UNE POP-UP
+// Mettre à jour le coach dans le fichier
 // =========================================================
-void show_popup_message(GtkWidget *parent, const char *title, const char *message, GtkMessageType type) {
-    GtkWidget *dialog = gtk_message_dialog_new(
-        parent ? GTK_WINDOW(parent) : NULL,
-        GTK_DIALOG_MODAL,
-        type,
-        GTK_BUTTONS_OK,
-        "%s", message);
+void update_coach_in_file(int coach_id, int column_index, const char *new_value) {
+    printf("\n=== DEBUG update_coach_in_file START ===\n");
+    printf("Updating coach ID %d, column %d, new value: %s\n", coach_id, column_index, new_value);
     
-    if (title) {
-        gtk_window_set_title(GTK_WINDOW(dialog), title);
+    FILE *f = fopen("coach.txt", "r");
+    FILE *f2 = fopen("coach_temp.txt", "w");
+    
+    if (!f || !f2) {
+        printf("ERROR: Cannot open files\n");
+        if (f) fclose(f);
+        if (f2) fclose(f2);
+        return;
     }
     
-    gtk_dialog_run(GTK_DIALOG(dialog));
-    gtk_widget_destroy(dialog);
-}
-
-// =========================================================
-// AFFICHER UNE POP-UP DE CONFIRMATION (YES/NO)
-// =========================================================
-gboolean show_confirmation_dialog(GtkWidget *parent, const char *title, const char *message) {
-    GtkWidget *dialog = gtk_message_dialog_new(
-        parent ? GTK_WINDOW(parent) : NULL,
-        GTK_DIALOG_MODAL,
-        GTK_MESSAGE_QUESTION,
-        GTK_BUTTONS_YES_NO,
-        "%s", message);
+    Coach c;
+    char gender_str[10];
+    char specialty[30];
+    int updated = 0;
     
-    if (title) {
-        gtk_window_set_title(GTK_WINDOW(dialog), title);
+    while (fscanf(f, "%d %29s %29s %d %d %d %29s %19s %9s %29s",
+                  &c.id, c.lastName, c.firstName,
+                  &c.dateOfBirth.day, &c.dateOfBirth.month, &c.dateOfBirth.year,
+                  c.center, c.phoneNumber, gender_str, specialty) == 10) {
+        
+        if (c.id == coach_id) {
+            updated = 1;
+            
+            // Mettre à jour le champ approprié
+            switch(column_index) {
+                case 1: // ID
+                    c.id = atoi(new_value);
+                    break;
+                case 2: // Last Name
+                    strncpy(c.lastName, new_value, sizeof(c.lastName)-1);
+                    c.lastName[sizeof(c.lastName)-1] = '\0';
+                    break;
+                case 3: // First Name
+                    strncpy(c.firstName, new_value, sizeof(c.firstName)-1);
+                    c.firstName[sizeof(c.firstName)-1] = '\0';
+                    break;
+                case 4: // Day
+                    c.dateOfBirth.day = atoi(new_value);
+                    break;
+                case 5: // Month
+                    c.dateOfBirth.month = atoi(new_value);
+                    break;
+                case 6: // Year
+                    c.dateOfBirth.year = atoi(new_value);
+                    break;
+                case 7: // Center
+                    strncpy(c.center, new_value, sizeof(c.center)-1);
+                    c.center[sizeof(c.center)-1] = '\0';
+                    break;
+                case 8: // Phone
+                    if (!is_valid_phone(new_value)) {
+                        printf("WARNING: Invalid phone number: %s\n", new_value);
+                    }
+                    strncpy(c.phoneNumber, new_value, sizeof(c.phoneNumber)-1);
+                    c.phoneNumber[sizeof(c.phoneNumber)-1] = '\0';
+                    break;
+                case 9: // Gender
+                    strncpy(gender_str, new_value, sizeof(gender_str)-1);
+                    gender_str[sizeof(gender_str)-1] = '\0';
+                    break;
+                case 10: // Specialty
+                    strncpy(specialty, new_value, sizeof(specialty)-1);
+                    specialty[sizeof(specialty)-1] = '\0';
+                    break;
+            }
+        }
+        
+        fprintf(f2, "%d %s %s %d %d %d %s %s %s %s\n",
+                c.id, c.lastName, c.firstName,
+                c.dateOfBirth.day, c.dateOfBirth.month, c.dateOfBirth.year,
+                c.center, c.phoneNumber, gender_str, specialty);
     }
     
-    gint response = gtk_dialog_run(GTK_DIALOG(dialog));
-    gtk_widget_destroy(dialog);
+    fclose(f);
+    fclose(f2);
     
-    return (response == GTK_RESPONSE_YES);
-}
-
-// ===========================================
-// CLEAR LABEL
-// ===========================================
-gboolean clear_label(gpointer data)
-{
-    gtk_label_set_text(GTK_LABEL(data), "");
-    return FALSE;
-}
-
-// ===========================================
-// VALIDATION INPUT - AVEC CONTRÔLE MAX 8 CHIFFRES
-// ===========================================
-int is_number(const char *str)
-{
-    if (str == NULL || str[0] == '\0') return 0;
-    for (int i = 0; str[i] != '\0'; i++)
-        if (!isdigit(str[i])) return 0;
-    return 1;
-}
-
-int is_valid_id(const char *str)
-{
-    if (!is_number(str)) return 0;
-    if (strlen(str) > 8) return 0;  // Maximum 8 chiffres
-    if (strlen(str) == 0) return 0; // Ne peut pas être vide
-    return 1;
-}
-
-int is_valid_phone(const char *str)
-{
-    if (!is_number(str)) return 0;
-    if (strlen(str) != 8) return 0;  // Doit être exactement 8 chiffres (format Tunisien)
-    return 1;
-}
-
-int is_letters(const char *str)
-{
-    if (str == NULL || str[0] == '\0') return 0;
-    for (int i = 0; str[i] != '\0'; i++)
-        if (!isalpha(str[i]) && str[i] != ' ') return 0;
-    return 1;
+    if (updated) {
+        remove("coach.txt");
+        rename("coach_temp.txt", "coach.txt");
+        printf("SUCCESS: Coach updated in file\n");
+        
+        // Envoyer un email de notification
+        char email_body[512];
+        const char *column_names[] = {"", "ID", "Last Name", "First Name", "Day", "Month", "Year", 
+                                      "Center", "Phone", "Gender", "Specialty"};
+        
+        snprintf(email_body, sizeof(email_body),
+                 "Coach information modified via TreeView:\n"
+                 "• Coach ID: %d\n"
+                 "• Field modified: %s\n"
+                 "• New value: %s\n"
+                 "• Timestamp: %s",
+                 coach_id, column_names[column_index], new_value, __DATE__);
+        
+        send_email_to_admin("Coach Modified via TreeView", email_body, "modify");
+    } else {
+        remove("coach_temp.txt");
+        printf("WARNING: Coach not found in file\n");
+    }
+    
+    printf("=== DEBUG update_coach_in_file END ===\n\n");
 }
 
 // =========================================================
-// CREATE COLUMNS POUR COURS (sans checkbox)
+// FONCTIONS POUR CHECKBOX DANS TREEVIEW (COACH SEULEMENT)
+// =========================================================
+
+// Fonction appelée quand on clique sur une checkbox
+void on_cell_toggled_coach(GtkCellRendererToggle *cell, gchar *path_str, gpointer data) {
+    if (!cell || !path_str || !data) return;
+    
+    GtkWidget *treeview = GTK_WIDGET(data);
+    GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(treeview));
+    if (!model) return;
+    
+    GtkTreePath *path = gtk_tree_path_new_from_string(path_str);
+    if (!path) return;
+    
+    GtkTreeIter iter;
+    gboolean active;
+    
+    if (gtk_tree_model_get_iter(model, &iter, path)) {
+        gtk_tree_model_get(model, &iter, 0, &active, -1);
+        active = !active;
+        gtk_list_store_set(GTK_LIST_STORE(model), &iter, 0, active, -1);
+    }
+    
+    gtk_tree_path_free(path);
+}
+
+// Fonction appelée quand on modifie une cellule
+void on_cell_edited_coach(GtkCellRendererText *cell, gchar *path_str, gchar *new_text, gpointer data) {
+    if (!cell || !path_str || !data) return;
+    
+    GtkWidget *treeview = GTK_WIDGET(data);
+    GtkWidget *window = gtk_widget_get_toplevel(treeview);
+    GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(treeview));
+    if (!model) return;
+    
+    GtkTreePath *path = gtk_tree_path_new_from_string(path_str);
+    if (!path) {
+        printf("ERROR: Invalid path string: %s\n", path_str);
+        return;
+    }
+    
+    GtkTreeIter iter;
+    if (!gtk_tree_model_get_iter(model, &iter, path)) {
+        gtk_tree_path_free(path);
+        return;
+    }
+    
+    // Récupérer l'ID du coach
+    int coach_id = -1;
+    gtk_tree_model_get(model, &iter, 1, &coach_id, -1);
+    
+    if (coach_id <= 0) {
+        gtk_tree_path_free(path);
+        return;
+    }
+    
+    // Demander confirmation
+    if (!show_confirmation_dialog(window, "Confirm Modification", 
+                                 "Do you want to save changes to this coach?")) {
+        gtk_tree_path_free(path);
+        return;
+    }
+    
+    // Trouver quelle colonne a été modifiée
+    int column_index = -1;
+    GList *columns = gtk_tree_view_get_columns(GTK_TREE_VIEW(treeview));
+    if (columns) {
+        GList *current = columns;
+        int col_num = 0;
+        while (current) {
+            GtkTreeViewColumn *col = current->data;
+            if (col) {
+                GList *cells = gtk_cell_layout_get_cells(GTK_CELL_LAYOUT(col));
+                if (cells) {
+                    GList *cell_current = cells;
+                    while (cell_current) {
+                        if (GTK_IS_CELL_RENDERER_TEXT(cell_current->data) && 
+                            cell_current->data == GTK_CELL_RENDERER(cell)) {
+                            column_index = col_num;
+                            break;
+                        }
+                        cell_current = cell_current->next;
+                    }
+                    g_list_free(cells);
+                }
+            }
+            if (column_index != -1) break;
+            current = current->next;
+            col_num++;
+        }
+        g_list_free(columns);
+    }
+    
+    if (column_index == -1) {
+        printf("ERROR: Could not determine which column was edited\n");
+        gtk_tree_path_free(path);
+        return;
+    }
+    
+    printf("DEBUG: Editing column %d for coach ID %d\n", column_index, coach_id);
+    
+    // Mettre à jour la TreeView
+    if (column_index == 1) { // ID (doit être un entier)
+        if (!is_number(new_text)) {
+            show_popup_message(window, "Error", "ID must be a number!", GTK_MESSAGE_ERROR);
+            gtk_tree_path_free(path);
+            return;
+        }
+        int new_id = atoi(new_text);
+        gtk_list_store_set(GTK_LIST_STORE(model), &iter, column_index, new_id, -1);
+    } else if (column_index >= 4 && column_index <= 6) { // Day, Month, Year (entiers)
+        if (!is_number(new_text)) {
+            show_popup_message(window, "Error", "Day, Month and Year must be numbers!", GTK_MESSAGE_ERROR);
+            gtk_tree_path_free(path);
+            return;
+        }
+        int value = atoi(new_text);
+        gtk_list_store_set(GTK_LIST_STORE(model), &iter, column_index, value, -1);
+    } else {
+        gtk_list_store_set(GTK_LIST_STORE(model), &iter, column_index, new_text, -1);
+    }
+    
+    // Mettre à jour le fichier
+    update_coach_in_file(coach_id, column_index, new_text);
+    
+    gtk_tree_path_free(path);
+}
+
+// Fonction pour initialiser les colonnes avec checkbox et édition
+void create_columns_with_checkbox_coach(GtkTreeView *treeview, const char **titles, int num_columns) {
+    if (!treeview || !titles || num_columns <= 0) {
+        printf("ERROR: Invalid parameters in create_columns_with_checkbox_coach\n");
+        return;
+    }
+    
+    // Supprimer les colonnes existantes de manière sécurisée
+    GList *columns = gtk_tree_view_get_columns(treeview);
+    if (columns) {
+        GList *current = columns;
+        while (current != NULL) {
+            GtkTreeViewColumn *col = current->data;
+            if (col) {
+                gtk_tree_view_remove_column(treeview, col);
+            }
+            current = current->next;
+        }
+        g_list_free(columns);
+    }
+    
+    // Ajouter la colonne checkbox
+    GtkCellRenderer *check_renderer = gtk_cell_renderer_toggle_new();
+    if (!check_renderer) {
+        printf("ERROR: Failed to create checkbox renderer\n");
+        return;
+    }
+    
+    GtkTreeViewColumn *check_column = gtk_tree_view_column_new_with_attributes(
+        "Select", check_renderer, "active", 0, NULL);
+    if (check_column) {
+        gtk_tree_view_append_column(treeview, check_column);
+        g_signal_connect(check_renderer, "toggled", G_CALLBACK(on_cell_toggled_coach), treeview);
+    }
+    
+    // Ajouter les autres colonnes avec édition
+    for (int i = 1; i < num_columns; i++) {
+        GtkCellRenderer *renderer = gtk_cell_renderer_text_new();
+        if (!renderer) {
+            printf("ERROR: Failed to create renderer for column %d\n", i);
+            continue;
+        }
+        
+        // Rendre les cellules éditables
+        g_object_set(renderer, "editable", TRUE, NULL);
+        g_signal_connect(renderer, "edited", G_CALLBACK(on_cell_edited_coach), treeview);
+        
+        GtkTreeViewColumn *column = gtk_tree_view_column_new_with_attributes(
+            titles[i], renderer, "text", i, NULL);
+        if (column) {
+            gtk_tree_view_column_set_resizable(column, TRUE);
+            gtk_tree_view_append_column(treeview, column);
+        }
+    }
+}
+
+// Obtenir les IDs sélectionnés via les checkbox (coach seulement)
+GList* get_selected_coach_ids(GtkWidget *treeview) {
+    GList *selected_ids = NULL;
+    
+    if (!treeview || !GTK_IS_TREE_VIEW(treeview)) {
+        printf("ERROR: Invalid treeview in get_selected_coach_ids\n");
+        return NULL;
+    }
+    
+    GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(treeview));
+    if (!model) return NULL;
+    
+    GtkTreeIter iter;
+    gboolean valid = gtk_tree_model_get_iter_first(model, &iter);
+    
+    while (valid) {
+        gboolean selected = FALSE;
+        int id = -1;
+        
+        gtk_tree_model_get(model, &iter, 0, &selected, 1, &id, -1);
+        
+        if (selected && id > 0) {
+            selected_ids = g_list_append(selected_ids, GINT_TO_POINTER(id));
+        }
+        
+        valid = gtk_tree_model_iter_next(model, &iter);
+    }
+    
+    return selected_ids;
+}
+
+// =========================================================
+// CREATE COLUMNS POUR COURS (sans checkbox et sans édition)
 // =========================================================
 void create_columns(GtkTreeView *treeview)
 {
+    if (!treeview) return;
+    
     if (g_list_length(gtk_tree_view_get_columns(treeview)) > 0)
         return;
 
@@ -476,28 +759,26 @@ void create_columns(GtkTreeView *treeview)
 }
 
 // =========================================================
-// LOAD coaches.txt → TreeView - AVEC CHECKBOX
+// LOAD coaches.txt → TreeView - AVEC CHECKBOX ET ÉDITION
 // =========================================================
 void loadCoaches(GtkTreeView *treeview, const char *filename)
 {
     printf("\n=== DEBUG loadCoaches START ===\n");
     printf("Loading from: %s\n", filename);
     
-    // Nettoyer la TreeView
-    GList *columns = gtk_tree_view_get_columns(treeview);
-    while (gtk_tree_view_get_column(treeview, 0) != NULL) {
-        GtkTreeViewColumn *col = gtk_tree_view_get_column(treeview, 0);
-        if (col) {
-            gtk_tree_view_remove_column(treeview, col);
-        }
+    if (!treeview) {
+        printf("ERROR: TreeView is NULL\n");
+        return;
     }
-    if (columns) g_list_free(columns);
-
+    
+    // Supprimer le modèle existant avant de créer un nouveau
+    GtkTreeModel *old_model = gtk_tree_view_get_model(treeview);
+    if (old_model) {
+        g_object_unref(old_model);
+    }
+    
     // Créer le store avec checkbox (première colonne = booléen)
-    GtkListStore *store;
-    GtkTreeIter iter;
-
-    store = gtk_list_store_new(11,
+    GtkListStore *store = gtk_list_store_new(11,
                                G_TYPE_BOOLEAN,    // 0: Checkbox
                                G_TYPE_INT,        // 1: ID
                                G_TYPE_STRING,     // 2: Last Name
@@ -529,6 +810,7 @@ void loadCoaches(GtkTreeView *treeview, const char *filename)
             printf("DEBUG: Loaded coach %d: %s %s (Specialty: %s)\n", 
                    c.id, c.firstName, c.lastName, specialty);
             
+            GtkTreeIter iter;
             gtk_list_store_append(store, &iter);
             gtk_list_store_set(store, &iter,
                                0, FALSE,           // Checkbox non cochée par défaut
@@ -550,6 +832,7 @@ void loadCoaches(GtkTreeView *treeview, const char *filename)
         
         if (line_count == 0) {
             printf("WARNING: File exists but no coaches loaded\n");
+            GtkTreeIter iter;
             gtk_list_store_append(store, &iter);
             gtk_list_store_set(store, &iter,
                                0, FALSE,
@@ -569,6 +852,7 @@ void loadCoaches(GtkTreeView *treeview, const char *filename)
     else
     {
         printf("ERROR: Cannot open file %s (errno: %d)\n", filename, errno);
+        GtkTreeIter iter;
         gtk_list_store_append(store, &iter);
         gtk_list_store_set(store, &iter,
                            0, FALSE,
@@ -585,14 +869,16 @@ void loadCoaches(GtkTreeView *treeview, const char *filename)
                            -1);
     }
 
+    // Définir le modèle avant de créer les colonnes
     gtk_tree_view_set_model(treeview, GTK_TREE_MODEL(store));
     
-    // Créer les colonnes avec checkbox (UNIQUEMENT POUR COACH)
+    // Créer les colonnes avec checkbox et édition (UNIQUEMENT POUR COACH)
     const char *titles[11] = {"Select", "ID", "Last Name", "First Name", "Day", "Month", "Year", 
                               "Center", "Phone", "Gender", "Specialty"};
     create_columns_with_checkbox_coach(treeview, titles, 11);
     
-    g_object_unref(store);
+    // NE PAS unref le store ici - il est géré par GTK maintenant
+    // g_object_unref(store);
     
     printf("=== DEBUG loadCoaches END ===\n");
 }
@@ -603,48 +889,27 @@ void loadCoaches(GtkTreeView *treeview, const char *filename)
 void refresh_tree(GtkWidget *treeview)
 {
     printf("\n=== DEBUG refresh_tree ===\n");
+    if (!treeview) {
+        printf("ERROR: Treeview is NULL\n");
+        return;
+    }
     loadCoaches(GTK_TREE_VIEW(treeview), "coach.txt");
 }
 
 // =========================================================
-// LOAD COURSES → TreeView (7 COLONNES SANS CHECKBOX)
+// LOAD COURSES → TreeView (7 COLONNES SANS CHECKBOX ET SANS ÉDITION)
 // =========================================================
 void loadCourses(GtkTreeView *treeview, const char *filename)
 {
     printf("\n=== DEBUG loadCourses START ===\n");
     
-    if (g_list_length(gtk_tree_view_get_columns(treeview)) > 0)
-    {
-        GtkListStore *store = GTK_LIST_STORE(gtk_tree_view_get_model(treeview));
-        if (store)
-        {
-            gtk_list_store_clear(store);
-        }
-        else
-        {
-            return;
-        }
+    if (!treeview) {
+        printf("ERROR: TreeView is NULL\n");
+        return;
     }
-    else
-    {
-        GtkCellRenderer *renderer;
-        GtkTreeViewColumn *column;
-        
-        const char *titles[7] = {"ID", "Name", "Type", "Center", "Time", "Equipment", "Capacity"};
-        
-        for (int i = 0; i < 7; i++)
-        {
-            renderer = gtk_cell_renderer_text_new();
-            column = gtk_tree_view_column_new_with_attributes(titles[i], renderer, "text", i, NULL);
-            gtk_tree_view_column_set_resizable(column, TRUE);
-            gtk_tree_view_append_column(treeview, column);
-        }
-    }
-
-    GtkListStore *store;
-    GtkTreeIter iter;
-
-    store = gtk_list_store_new(7,
+    
+    // Créer le store
+    GtkListStore *store = gtk_list_store_new(7,
                                G_TYPE_STRING,
                                G_TYPE_STRING,
                                G_TYPE_STRING,
@@ -657,10 +922,12 @@ void loadCourses(GtkTreeView *treeview, const char *filename)
     if (f)
     {
         char line[256];
+        // Lire l'en-tête
         if (fgets(line, sizeof(line), f) != NULL)
         {
             printf("DEBUG: Skipping header: %s", line);
             
+            // Lire les données
             while (fgets(line, sizeof(line), f))
             {
                 line[strcspn(line, "\n")] = '\0';
@@ -674,6 +941,7 @@ void loadCourses(GtkTreeView *treeview, const char *filename)
                 
                 if (fields == 7)
                 {
+                    GtkTreeIter iter;
                     gtk_list_store_append(store, &iter);
                     gtk_list_store_set(store, &iter,
                                        0, course_id,
@@ -691,6 +959,7 @@ void loadCourses(GtkTreeView *treeview, const char *filename)
     }
     else
     {
+        GtkTreeIter iter;
         gtk_list_store_append(store, &iter);
         gtk_list_store_set(store, &iter,
                            0, "ERROR",
@@ -703,8 +972,16 @@ void loadCourses(GtkTreeView *treeview, const char *filename)
                            -1);
     }
 
+    // Définir le modèle
     gtk_tree_view_set_model(treeview, GTK_TREE_MODEL(store));
-    g_object_unref(store);
+    
+    // Créer les colonnes si nécessaire
+    if (g_list_length(gtk_tree_view_get_columns(treeview)) == 0) {
+        create_columns(treeview);
+    }
+    
+    // NE PAS unref le store ici
+    // g_object_unref(store);
     
     printf("=== DEBUG loadCourses END ===\n");
 }
@@ -714,6 +991,7 @@ void loadCourses(GtkTreeView *treeview, const char *filename)
 // =========================================================
 void refresh_course_tree(GtkWidget *treeview)
 {
+    if (!treeview) return;
     loadCourses(GTK_TREE_VIEW(treeview), "courses.txt");
 }
 
@@ -736,13 +1014,15 @@ int update_course_capacity(const char *course_id, int change_amount)
     int line_count = 0;
     char line[256];
     
+    // Lire l'en-tête
     if (fgets(line, sizeof(line), f)) {
         strncpy(lines[line_count++], line, sizeof(lines[0])-1);
     }
     
     int updated = 0;
     
-    while (fgets(line, sizeof(line), f)) {
+    // Lire les données
+    while (fgets(line, sizeof(line), f) && line_count < 100) {
         char current_course_id[50], course_name[50], course_type[50];
         char course_center[50], course_time[50], equipment[50], capacity_text[50];
         
@@ -791,9 +1071,6 @@ int update_course_capacity(const char *course_id, int change_amount)
         }
         
         line_count++;
-        if (line_count >= 100) {
-            break;
-        }
     }
     
     fclose(f);
@@ -1616,12 +1893,13 @@ void on_btsearch_clicked(GtkButton *button, gpointer user_data)
     // Mettre à jour la TreeView avec les résultats filtrés
     gtk_tree_view_set_model(GTK_TREE_VIEW(treeviewmanage), GTK_TREE_MODEL(store));
     
-    // Créer les colonnes avec checkbox pour les résultats de recherche
+    // Créer les colonnes avec checkbox et édition pour les résultats de recherche
     const char *titles[11] = {"Select", "ID", "Last Name", "First Name", "Day", "Month", "Year", 
                               "Center", "Phone", "Gender", "Specialty"};
     create_columns_with_checkbox_coach(GTK_TREE_VIEW(treeviewmanage), titles, 11);
     
-    g_object_unref(store);
+    // NE PAS unref le store ici
+    // g_object_unref(store);
     
     // Nettoyer la mémoire
     if (clean_name) g_free(clean_name);
@@ -1656,6 +1934,11 @@ void on_treeviewmanage_row_activated(GtkTreeView *treeview,
     
     GtkTreeIter iter;
     GtkTreeModel *model = gtk_tree_view_get_model(treeview);
+    
+    if (!model) {
+        printf("ERROR: Tree model is NULL\n");
+        return;
+    }
 
     gboolean checkbox_state;
     int id, day, month, year;
@@ -1693,6 +1976,7 @@ void on_treeviewmanage_row_activated(GtkTreeView *treeview,
         GtkWidget *window = lookup_widget(GTK_WIDGET(treeview), "raed_manage_coach");
 
         if (!window) {
+            printf("ERROR: Window not found\n");
             if (lname) g_free(lname);
             if (fname) g_free(fname);
             if (center) g_free(center);
@@ -1791,7 +2075,7 @@ void on_refresh_clicked(GtkButton *button, gpointer data)
 }
 
 // =========================================================
-// COURSE TREEVIEW ROW ACTIVATED (7 COLONNES SANS CHECKBOX)
+// COURSE TREEVIEW ROW ACTIVATED (7 COLONNES SANS CHECKBOX ET SANS ÉDITION)
 // =========================================================
 void on_treeview13_row_activated(GtkTreeView *treeview,
                                  GtkTreePath *path,
@@ -1800,6 +2084,8 @@ void on_treeview13_row_activated(GtkTreeView *treeview,
 {
     GtkTreeIter iter;
     GtkTreeModel *model = gtk_tree_view_get_model(treeview);
+    
+    if (!model) return;
 
     char course_id[50], course_name[50], course_type[50];
     char course_center[50], course_time[50], equipment[50], capacity[50];
