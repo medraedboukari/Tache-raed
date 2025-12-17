@@ -16,3 +16,5 @@
 11111|raaaaeeeed raaaed|45126|fitness|1|12|2003|C004|Boxing|Martial|18:30
 120925|raaaed boukarii|7427542|force|5|6|2003|C002|Cardio|Fitness|10:30
 123456|dddddd rrrrr|412364|force|1|12|2000|C003|Swimming|Aquatic|14:00
+1234567|boukari raaaed|12345678|fitness|1|12|2000|C003|Swimming|Aquatic|14:00
+0|aaaaa raaa|74185296|fitness|1|12|2000|C001|Yoga|Wellness|09:00
